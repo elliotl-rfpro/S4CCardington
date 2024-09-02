@@ -106,7 +106,7 @@ def perform_ssim_comparison(image_paths, view=True, area=None):
     return ssim_g
 
 
-def visualise_ssim_regions(img1, img2, ssim_index, view=True, area=None):
+def visualise_ssim_regions(img1, img2, ssim_index, view=True, save=False, area=None):
     """Tool for visualising processed SSIM regions"""
     if area is None:
         area = rects
@@ -135,19 +135,8 @@ def visualise_ssim_regions(img1, img2, ssim_index, view=True, area=None):
     print(f'SSIM RGB: {ssim_rgb}')
     print(f'SSIM Greyscale corrected: {ssim_g2}')
 
-    # Plot lineouts of the image
-    img_len = img1_g.shape[0] // 2
-    plt.plot(img1_g[img_len, :], '.-', label='Simulated')
-    plt.plot(img1_g_2[img_len, :], '.-', label='Simulated (basic ISP)')
-    plt.plot(img2_g[img_len, :], '.-', label='Measured')
-    plt.title(f'Lineout for row {img_len}')
-    plt.ylabel('Pixel Intensity')
-    plt.xlabel('Pixel index')
-    plt.legend()
-    plt.show()
-
     if view:
-        fig, axs = plt.subplots(2, 4)
+        fig, axs = plt.subplots(2, 3, figsize=(10, 6))
         axs[0, 0].imshow(img1_g, cmap='gray')
         axs[0, 0].grid(False)
         axs[1, 0].imshow(img2_g, cmap='gray')
@@ -161,55 +150,55 @@ def visualise_ssim_regions(img1, img2, ssim_index, view=True, area=None):
         axs[1, 2].imshow(img2_arr)
         axs[1, 2].grid(False)
 
-        # Plot colour histograms underneath
-        b1, g1, r1 = get_colour_histograms(img1_arr)
-        axs[0, 3].plot(r1[1][:256], r1[0], color='r')
-        axs[0, 3].plot(g1[1][:256], g1[0], color='g')
-        axs[0, 3].plot(b1[1][:256], b1[0], color='b')
-        # axs[2, 0].yscale('log')
-
-        b2, g2, r2 = get_colour_histograms(img2_arr)
-        axs[1, 3].plot(r2[1][:256], r2[0], color='r')
-        axs[1, 3].plot(g2[1][:256], g2[0], color='g')
-        axs[1, 3].plot(b2[1][:256], b2[0], color='b')
-        # axs[2, 1].yscale('log')
-
         # Show
-        plt.suptitle(f'Comparison between simulated and measured images. SSIM: {ssim_index}')
-        axs[0, 0].title.set_text('Simulated image (greyscale)')
-        axs[1, 0].title.set_text('Measured image (greyscale)')
-        axs[0, 1].title.set_text('Simulated image (greyscale w/ basic ISP)')
-        axs[1, 1].title.set_text('Measured image (greyscale)')
-        axs[0, 2].title.set_text('Simulated image (basic ISP colour bins)')
-        axs[1, 2].title.set_text('Measured image (colour bins)')
+        plt.suptitle(f'Comparison between simulated and measured images')
+        axs[0, 0].title.set_text('Simulated (greyscale)')
+        axs[1, 0].title.set_text('Measured (greyscale)')
+        axs[0, 1].title.set_text('Simulated (colour)')
+        axs[1, 1].title.set_text('Measured (colour)')
+        axs[0, 2].title.set_text('Simulated (basic ISP, colour)')
+        axs[1, 2].title.set_text('Measured (colour)')
+        axs[0, 0].set_xlabel(f'SSIM: {ssim_index:.3f}')
+        axs[0, 2].set_xlabel(f'SSIM: {ssim_rgb:.3f}')
+        plt.tight_layout()
+
+        # Plot colour histograms
+        fig, axs = plt.subplots(2, 2, figsize=(10, 6))
+        b1, g1, r1 = get_colour_histograms(img1)
+        axs[0, 0].plot(r1[1][:256], r1[0], color='r')
+        axs[0, 0].plot(g1[1][:256], g1[0], color='g')
+        axs[0, 0].plot(b1[1][:256], b1[0], color='b')
+        b1, g1, r1 = get_colour_histograms(img1_arr)
+        axs[0, 1].plot(r1[1][:256], r1[0], color='r')
+        axs[0, 1].plot(g1[1][:256], g1[0], color='g')
+        axs[0, 1].plot(b1[1][:256], b1[0], color='b')
+        b2, g2, r2 = get_colour_histograms(img2_arr)
+        axs[1, 0].plot(r2[1][:256], r2[0], color='r')
+        axs[1, 0].plot(g2[1][:256], g2[0], color='g')
+        axs[1, 0].plot(b2[1][:256], b2[0], color='b')
+        axs[1, 1].plot(r2[1][:256], r2[0], color='r')
+        axs[1, 1].plot(g2[1][:256], g2[0], color='g')
+        axs[1, 1].plot(b2[1][:256], b2[0], color='b')
+
+        plt.suptitle(f'Colour histograms')
+        axs[0, 0].title.set_text('Simulated (colour bins)')
+        axs[1, 0].title.set_text('Measured (colour bins)')
+        axs[0, 1].title.set_text('Simulated (basic ISP, colour bins)')
+        axs[1, 1].title.set_text('Measured (colour bins)')
         plt.tight_layout()
         plt.show()
 
-        # # Plot next to each other for neat comparison
-        # plt.figure(figsize=(15, 15))
-        # plt.subplot(1, 2, 1)
-        # plt.title("Simulated image RGB lineouts")
-        # plt.plot(r1[1][:256], r1[0], color='r')
-        # plt.plot(g1[1][:256], g1[0], color='g')
-        # plt.plot(b1[1][:256], b1[0], color='b')
-        #
-        # plt.subplot(1, 2, 2)
-        # plt.title("Measured image RGB lineouts")
-        # plt.plot(r2[1][:256], r2[0], color='r')
-        # plt.plot(g2[1][:256], g2[0], color='g')
-        # plt.plot(b2[1][:256], b2[0], color='b')
-        # plt.show()
-        #
-        # plt.figure(figsize=(15, 15))
-        # plt.subplot(1, 2, 1)
-        # plt.grid(False)
-        # plt.imshow(img1_arr)
-        #
-        # plt.subplot(1, 2, 2)
-        # plt.grid(False)
-        # plt.imshow(img2_arr)
-        # plt.tight_layout()
-        # plt.show()
+        # Plot lineouts of the image
+        img_len = img1_g.shape[0] // 2
+        plt.figure(figsize=(10, 6))
+        plt.plot(img1_g[img_len, :], '.-', label='Simulated')
+        plt.plot(img1_g_2[img_len, :], '.-', label='Simulated (basic ISP)')
+        plt.plot(img2_g[img_len, :], '.-', label='Measured')
+        plt.title(f'Lineout for row {img_len}')
+        plt.ylabel('Pixel Intensity')
+        plt.xlabel('Pixel index')
+        plt.legend()
+        plt.show()
 
 
 def get_colour_histograms(img_data):
@@ -311,13 +300,13 @@ def evaluate_sharpness(path_s, path_m, camera='Simulated/Camera 1'):
 
 if __name__ == '__main__':
     # Load images
-    camera = 'Simulated/Camera 1'
-    sim_path = f'C:/Users/ElliotLondon/Documents/PythonLocal/S4CSCardington/data/{camera}/sim_2022-03-05-10-02-36_f_200.png'
-    meas_path = f'C:/Users/ElliotLondon/Documents/PythonLocal/S4CSCardington/data/{camera}/2022-03-05-10-02-36.png'
+    # camera = 'Simulated/Camera 1'
+    # sim_path = f'C:/Users/ElliotLondon/Documents/PythonLocal/S4CSCardington/data/{camera}/sim_2022-03-05-10-02-36_f_200.png'
+    # meas_path = f'C:/Users/ElliotLondon/Documents/PythonLocal/S4CSCardington/data/{camera}/2022-03-05-10-02-36.png'
 
-    # camera = 'Simulated/Camera 4'
-    # sim_path = f'C:/Users/ElliotLondon/Documents/PythonLocal/S4CSCardington/data/{camera}/sim_2022-10-20-07-39-25_f_25_sh05.png'
-    # meas_path = f'C:/Users/ElliotLondon/Documents/PythonLocal/S4CSCardington/data/{camera}/2022-10-20-07-39-25.png'
+    camera = 'Simulated/Camera 4'
+    sim_path = f'C:/Users/ElliotLondon/Documents/PythonLocal/S4CSCardington/data/{camera}/sim_2022-10-20-07-39-25_f_25_sh05.png'
+    meas_path = f'C:/Users/ElliotLondon/Documents/PythonLocal/S4CSCardington/data/{camera}/2022-10-20-07-39-25.png'
 
     # # Run analysis routine for the two images, selecting regions
     # for img_path in [sim_path, meas_path]:
@@ -327,7 +316,7 @@ if __name__ == '__main__':
     # ssim_value = perform_ssim_comparison([sim_path, meas_path], view=True, area=None)
 
     # Compare region SSIMs
-    for region in [c1_stop_sign]:
+    for region in [c4_holey_w]:
         ssim_value = perform_ssim_comparison([sim_path, meas_path], view=True, area=region)
 
     # # Perform loop analysis here
