@@ -2,13 +2,15 @@
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import cv2
-import scipy.signal
 from skimage.metrics import structural_similarity as ssim
-from scipy.signal import find_peaks
 from PIL import Image, ImageTk
 import tkinter as tk
+import seaborn as sns
+from core.object_locations import *
+
+sns.set(palette="dark", font_scale=1.1, color_codes=True)
+sns.set_style('darkgrid', {'axes.linewidth': 1, 'axes.edgecolor': 'black'})
 
 matplotlib.use('TkAgg')
 
@@ -78,18 +80,20 @@ class ImageCropper:
         self.root.destroy()
 
 
-def perform_ssim_comparison(image_paths):
-    # Open images and crop them based upon previously measured rects
-    img1 = Image.open(image_paths[0]).crop(rects[0])
-    img2 = Image.open(image_paths[1]).crop(rects[1])
+def perform_ssim_comparison(image_paths, view=True, area=None):
+    # Open images and crop them based upon previously measured rects, or supplied rects
+    if area is None:
+        area = rects
+    img1 = Image.open(image_paths[0]).crop(area[0])
+    img2 = Image.open(image_paths[1]).crop(area[1])
 
     # Greyscale
     img1_g = np.array(img1.convert("L"))
     img2_g = np.array(img2.convert("L"))
 
     # Resize regions so that they match
-    w1 = abs(rects[0][0] - rects[0][2])
-    h1 = abs(rects[0][1] - rects[0][3])
+    w1 = abs(area[0][0] - area[0][2])
+    h1 = abs(area[0][1] - area[0][3])
     img2_g = cv2.resize(img2_g, (w1, h1))
 
     # Compute SSIM
@@ -97,13 +101,16 @@ def perform_ssim_comparison(image_paths):
     print(f'\nSSIM Greyscale: {ssim_g}')
 
     # Visualise
-    visualise_ssim_regions(img1, img2, ssim_g)
+    visualise_ssim_regions(img1, img2, ssim_g, view=view, area=area)
 
     return ssim_g
 
 
-def visualise_ssim_regions(img1, img2, ssim_index):
+def visualise_ssim_regions(img1, img2, ssim_index, view=True, area=None):
     """Tool for visualising processed SSIM regions"""
+    if area is None:
+        area = rects
+
     # Greyscale
     img1_g = np.array(img1.convert("L"))
     img2_g = np.array(img2.convert("L"))
@@ -111,71 +118,98 @@ def visualise_ssim_regions(img1, img2, ssim_index):
     # Colour correction
     img1_arr = np.array(img1)
     img2_arr = np.array(img2)
-    # img1_arr = colour_adjust(img1_arr, [10, 80, -40])
     img1_arr = auto_colour_adjust(img1_arr, img2_arr)
 
     # Resize regions so that they match
-    w1 = abs(rects[0][0] - rects[0][2])
-    h1 = abs(rects[0][1] - rects[0][3])
+    w1 = abs(area[0][0] - area[0][2])
+    h1 = abs(area[0][1] - area[0][3])
     img2_g = cv2.resize(img2_g, (w1, h1))
     img2_arr = cv2.resize(img2_arr, (w1, h1))
 
+    # Convert back to greyscale for comparison
+    img1_g_2 = np.array(Image.fromarray(img1_arr).convert("L"))
+    img2_g_2 = np.array(Image.fromarray(img2_arr).convert("L"))
+
     ssim_rgb, diff = ssim(img1_arr, img2_arr, full=True, data_range=255, channel_axis=-1)
+    ssim_g2, diff = ssim(img1_g_2, img2_g_2, full=True, data_range=255, channel_axis=-1)
     print(f'SSIM RGB: {ssim_rgb}')
+    print(f'SSIM Greyscale corrected: {ssim_g2}')
 
-    fig, axs = plt.subplots(2, 3)
-    axs[0, 0].imshow(img1_g, cmap='gray')
-    axs[1, 0].imshow(img2_g, cmap='gray')
-    axs[0, 1].imshow(img1_arr)
-    axs[1, 1].imshow(img2_arr)
-
-    # Plot colour histograms underneath
-    b1, g1, r1 = get_colour_histograms(img1_arr)
-    axs[0, 2].plot(r1[1][:256], r1[0], color='r')
-    axs[0, 2].plot(g1[1][:256], g1[0], color='g')
-    axs[0, 2].plot(b1[1][:256], b1[0], color='b')
-    # axs[2, 0].yscale('log')
-
-    b2, g2, r2 = get_colour_histograms(img2_arr)
-    axs[1, 2].plot(r2[1][:256], r2[0], color='r')
-    axs[1, 2].plot(g2[1][:256], g2[0], color='g')
-    axs[1, 2].plot(b2[1][:256], b2[0], color='b')
-    # axs[2, 1].yscale('log')
-
-    # Show
-    plt.suptitle(f'Comparison between simulated and measured images. SSIM: {ssim_index}')
-    axs[0, 0].title.set_text('Simulated image (greyscale)')
-    axs[1, 0].title.set_text('Measured image (greyscale)')
-    axs[0, 1].title.set_text('Simulated image (full colour)')
-    axs[1, 1].title.set_text('Measured image (full colour)')
-    axs[0, 2].title.set_text('Simulated image (colour bins)')
-    axs[1, 2].title.set_text('Measured image (colour bins)')
-    plt.tight_layout()
+    # Plot lineouts of the image
+    img_len = img1_g.shape[0] // 2
+    plt.plot(img1_g[img_len, :], '.-', label='Simulated')
+    plt.plot(img1_g_2[img_len, :], '.-', label='Simulated (basic ISP)')
+    plt.plot(img2_g[img_len, :], '.-', label='Measured')
+    plt.title(f'Lineout for row {img_len}')
+    plt.ylabel('Pixel Intensity')
+    plt.xlabel('Pixel index')
+    plt.legend()
     plt.show()
 
-    # Plot next to each other for neat comparison
-    plt.figure(figsize=(15, 15))
-    plt.subplot(1, 2, 1)
-    plt.title("Simulated image RGB lineouts")
-    plt.plot(r1[1][:256], r1[0], color='r')
-    plt.plot(g1[1][:256], g1[0], color='g')
-    plt.plot(b1[1][:256], b1[0], color='b')
+    if view:
+        fig, axs = plt.subplots(2, 4)
+        axs[0, 0].imshow(img1_g, cmap='gray')
+        axs[0, 0].grid(False)
+        axs[1, 0].imshow(img2_g, cmap='gray')
+        axs[1, 0].grid(False)
+        axs[0, 1].imshow(img1)
+        axs[0, 1].grid(False)
+        axs[1, 1].imshow(img2_arr)
+        axs[1, 1].grid(False)
+        axs[0, 2].imshow(img1_arr)
+        axs[0, 2].grid(False)
+        axs[1, 2].imshow(img2_arr)
+        axs[1, 2].grid(False)
 
-    plt.subplot(1, 2, 2)
-    plt.title("Measured image RGB lineouts")
-    plt.plot(r2[1][:256], r2[0], color='r')
-    plt.plot(g2[1][:256], g2[0], color='g')
-    plt.plot(b2[1][:256], b2[0], color='b')
-    plt.show()
+        # Plot colour histograms underneath
+        b1, g1, r1 = get_colour_histograms(img1_arr)
+        axs[0, 3].plot(r1[1][:256], r1[0], color='r')
+        axs[0, 3].plot(g1[1][:256], g1[0], color='g')
+        axs[0, 3].plot(b1[1][:256], b1[0], color='b')
+        # axs[2, 0].yscale('log')
 
-    plt.figure(figsize=(15, 15))
-    plt.subplot(1, 2, 1)
-    plt.imshow(img1_arr)
+        b2, g2, r2 = get_colour_histograms(img2_arr)
+        axs[1, 3].plot(r2[1][:256], r2[0], color='r')
+        axs[1, 3].plot(g2[1][:256], g2[0], color='g')
+        axs[1, 3].plot(b2[1][:256], b2[0], color='b')
+        # axs[2, 1].yscale('log')
 
-    plt.subplot(1, 2, 2)
-    plt.imshow(img2_arr)
-    plt.tight_layout()
-    plt.show()
+        # Show
+        plt.suptitle(f'Comparison between simulated and measured images. SSIM: {ssim_index}')
+        axs[0, 0].title.set_text('Simulated image (greyscale)')
+        axs[1, 0].title.set_text('Measured image (greyscale)')
+        axs[0, 1].title.set_text('Simulated image (greyscale w/ basic ISP)')
+        axs[1, 1].title.set_text('Measured image (greyscale)')
+        axs[0, 2].title.set_text('Simulated image (basic ISP colour bins)')
+        axs[1, 2].title.set_text('Measured image (colour bins)')
+        plt.tight_layout()
+        plt.show()
+
+        # # Plot next to each other for neat comparison
+        # plt.figure(figsize=(15, 15))
+        # plt.subplot(1, 2, 1)
+        # plt.title("Simulated image RGB lineouts")
+        # plt.plot(r1[1][:256], r1[0], color='r')
+        # plt.plot(g1[1][:256], g1[0], color='g')
+        # plt.plot(b1[1][:256], b1[0], color='b')
+        #
+        # plt.subplot(1, 2, 2)
+        # plt.title("Measured image RGB lineouts")
+        # plt.plot(r2[1][:256], r2[0], color='r')
+        # plt.plot(g2[1][:256], g2[0], color='g')
+        # plt.plot(b2[1][:256], b2[0], color='b')
+        # plt.show()
+        #
+        # plt.figure(figsize=(15, 15))
+        # plt.subplot(1, 2, 1)
+        # plt.grid(False)
+        # plt.imshow(img1_arr)
+        #
+        # plt.subplot(1, 2, 2)
+        # plt.grid(False)
+        # plt.imshow(img2_arr)
+        # plt.tight_layout()
+        # plt.show()
 
 
 def get_colour_histograms(img_data):
@@ -189,7 +223,7 @@ def get_colour_histograms(img_data):
 
 
 def colour_adjust(img_in, rgb_arr):
-    """Properly adjust the colours of a cv2 uint8 image array"""
+    """Manually adjust the colours of a cv2 uint8 image array"""
     rgb_arr = np.array(rgb_arr)
 
     for colour in range(0, 2):
@@ -249,19 +283,54 @@ def match_histograms(source, template):
     return interp_t_values[bin_idx].reshape(old_shape)
 
 
+def evaluate_sharpness(path_s, path_m, camera='Simulated/Camera 1'):
+    """Evaluate the SSIM between different specified regions to determine the effect of changing image sharpness"""
+    view = False
+
+    sharpnesses = ['02', '03', '04', '05', '06', '08', '1']
+    targets = [c1_holey_w, c1_holey_b, c1_usaf, c1_h_mannequin, c1_grass, c1_sky]
+    labels = ['Holey Target (White)', 'Holey Target (Black)', 'USAF Target', 'Heated Mannequin', 'Grass', 'Overcast Sky']
+    i = 0
+    for target in targets:
+        ssim_values = []
+        for sharpness in sharpnesses:
+            path_s = f'C:/Users/ElliotLondon/Documents/PythonLocal/S4CSCardington/data/{camera}/sim_2022-03-05-10-02-36_f_250_sh{sharpness}.png'
+            # if sharpness == '1':
+            #     view = True
+            # else:
+            #     view = False
+            ssim_values.append(perform_ssim_comparison([path_s, path_m], view=view, area=target))
+        plt.plot([0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0], ssim_values, '.-', label=labels[i])
+        i += 1
+    plt.title('Image sharpness vs SSIM result')
+    plt.xlabel('Image sharpness')
+    plt.xlabel('SSIM Result')
+    plt.legend()
+    plt.show()
+
+
 if __name__ == '__main__':
     # Load images
-    sim_path = 'C:/Users/ElliotLondon/Documents/PythonLocal/S4CSCardington/data/sim_2022-03-05-10-02-36.png'
-    meas_path = 'C:/Users/ElliotLondon/Documents/PythonLocal/S4CSCardington/data/2022-03-05-10-02-36.png'
-    img_paths = [sim_path, meas_path]
+    camera = 'Simulated/Camera 1'
+    sim_path = f'C:/Users/ElliotLondon/Documents/PythonLocal/S4CSCardington/data/{camera}/sim_2022-03-05-10-02-36_f_200.png'
+    meas_path = f'C:/Users/ElliotLondon/Documents/PythonLocal/S4CSCardington/data/{camera}/2022-03-05-10-02-36.png'
 
-    # Run analysis routine for the two images
-    for img_path in img_paths:
-        root = tk.Tk()
-        app = ImageCropper(root, img_path)
-        root.mainloop()
+    # camera = 'Simulated/Camera 4'
+    # sim_path = f'C:/Users/ElliotLondon/Documents/PythonLocal/S4CSCardington/data/{camera}/sim_2022-10-20-07-39-25_f_25_sh05.png'
+    # meas_path = f'C:/Users/ElliotLondon/Documents/PythonLocal/S4CSCardington/data/{camera}/2022-10-20-07-39-25.png'
+
+    # # Run analysis routine for the two images, selecting regions
+    # for img_path in [sim_path, meas_path]:
+    #     root = tk.Tk()
+    #     app = ImageCropper(root, img_path)
+    #     root.mainloop()
+    # ssim_value = perform_ssim_comparison([sim_path, meas_path], view=True, area=None)
 
     # Compare region SSIMs
-    ssim_value = perform_ssim_comparison(img_paths)
+    for region in [c1_stop_sign]:
+        ssim_value = perform_ssim_comparison([sim_path, meas_path], view=True, area=region)
+
+    # # Perform loop analysis here
+    # evaluate_sharpness(sim_path, meas_path)
 
     print('All done!')
